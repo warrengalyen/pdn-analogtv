@@ -1,8 +1,40 @@
 ﻿using PaintDotNet;
 using PaintDotNet.Effects;
+using PaintDotNet.Imaging;
 using PaintDotNet.IndirectUI;
 using PaintDotNet.PropertySystem;
 using System.Drawing;
+
+
+/*
+ * Analog TV Effect for Paint.NET
+ * Makes an image look like it was displayed on analog TV
+ * by simulating the actual signal generated.
+ * 
+ * 2023 Warren Galyen
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 
 namespace AnalogTVFilter
 {
@@ -11,7 +43,7 @@ namespace AnalogTVFilter
         public string? DisplayName => "Analog TV";
         public string? Author => "Warren Galyen";
         public string? Copyright => "2023 Mechanika Design";
-        public Version? Version => new Version("0.4");
+        public Version? Version => new Version("0.5");
         public Uri? WebsiteUri => new Uri("https://github.com/warrengalyen/pdn-analogtv");
     }
 
@@ -43,9 +75,9 @@ namespace AnalogTVFilter
         bool doY;
         bool doU;
         bool doV;
-        static Image iconImage;
+        static IBitmapSource nullsource = null;
 
-        public AnalogTVFilter() : base("Analog TV", iconImage, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable, RenderingSchedule = EffectRenderingSchedule.None })
+        public AnalogTVFilter() : base("Analog TV", nullsource, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable, RenderingSchedule = EffectRenderingSchedule.None })
         {
         }
 
@@ -194,7 +226,7 @@ namespace AnalogTVFilter
                     surrRect.Width = rois[i].Right - surrRect.X;
                 }
 
-                if (rois[i].Bottom < surrRect.Bottom)
+                if (rois[i].Bottom > surrRect.Bottom)
                 {
                     surrRect.Height = rois[i].Bottom - surrRect.Y;
                 }
@@ -202,7 +234,7 @@ namespace AnalogTVFilter
             Surface inSrf = new Surface(surrRect.Size);
             inSrf.CopySurface(SrcArgs.Surface, surrRect);
             Surface wrkSrf = new Surface(wrkWidth, format.VideoScanlines);
-            wrkSrf.FitSurface(ResamplingAlgorithm.SuperSampling, inSrf);
+            wrkSrf.FitSurface(ResamplingAlgorithm.AdaptiveHighQuality, inSrf);
             ImageData inIDat = new ImageData();
             inIDat.Width = wrkWidth;
             inIDat.Height = format.VideoScanlines;
@@ -216,7 +248,7 @@ namespace AnalogTVFilter
             DistortSignal(signal, signal.Length * format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
             ImageData outIDat = format.Decode(signal, wrkWidth, crosstalk, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
             Surface destSurf = new Surface(surrRect.Size);
-            destSurf.FitSurface(ResamplingAlgorithm.LinearLowQuality, wrkSrf);
+            destSurf.FitSurface(ResamplingAlgorithm.AdaptiveHighQuality, wrkSrf);
             for (int i = 0; i < inIDat.Data.Length; i++)
             {
                 wrkblk[i] = outIDat.Data[i];
