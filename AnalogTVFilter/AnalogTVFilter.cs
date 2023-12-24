@@ -158,17 +158,21 @@ namespace AnalogTVFilter
         protected override void OnRender(Rectangle[] rois, int startIndex, int length)
         {
             AnalogFormat format;
+            int wrkWidth;
             switch (chosenFormat)
             {
                 default:
                 case "NTSC":
                     format = new NTSCFormat();
+                    wrkWidth = 1280;
                     break;
                 case "PAL":
                     format = new PALFormat();
+                    wrkWidth = 1536;
                     break;
                 case "SECAM":
                     format = new SECAMFormat();
+                    wrkWidth = 1536;
                     break;
             }
             format.SetInterlace(interlace);
@@ -195,13 +199,28 @@ namespace AnalogTVFilter
                     surrRect.Height = rois[i].Bottom - surrRect.Y;
                 }
             }
-            Surface wrkSrf = new Surface(surrRect.Size);
-            wrkSrf.CopySurface(SrcArgs.Surface, surrRect);
-            double[] signal = format.Encode(wrkSrf);
+            Surface inSrf = new Surface(surrRect.Size);
+            inSrf.CopySurface(SrcArgs.Surface, surrRect);
+            Surface wrkSrf = new Surface(wrkWidth, format.VideoScanlines);
+            wrkSrf.FitSurface(ResamplingAlgorithm.SuperSampling, inSrf);
+            ImageData inIDat = new ImageData();
+            inIDat.Width = wrkWidth;
+            inIDat.Height = format.VideoScanlines;
+            inIDat.Data = new byte[wrkWidth * format.VideoScanlines * 4];
+            MemoryBlock wrkblk = wrkSrf.Scan0;
+            for (int i = 0; i < inIDat.Data.Length; i++)
+            {
+                inIDat.Data[i] = wrkblk[i];
+            }
+            double[] signal = format.Encode(inIDat);
             DistortSignal(signal, signal.Length * format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
-            wrkSrf = format.Decode(signal, surrRect.Width, crosstalk, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
+            ImageData outIDat = format.Decode(signal, wrkWidth, crosstalk, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
             Surface destSurf = new Surface(surrRect.Size);
             destSurf.FitSurface(ResamplingAlgorithm.LinearLowQuality, wrkSrf);
+            for (int i = 0; i < inIDat.Data.Length; i++)
+            {
+                wrkblk[i] = outIDat.Data[i];
+            }
             if (length <= 0) return;
             for (int i = startIndex; i < startIndex + length; i++)
             {

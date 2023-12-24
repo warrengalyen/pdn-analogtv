@@ -1,7 +1,12 @@
-﻿using PaintDotNet;
-
-namespace AnalogTVFilter
+﻿namespace AnalogTVFilter
 {
+    public struct ImageData
+    {
+        public byte[] Data;
+        public int Width;
+        public int Height;
+    }
+
     // Base class for all analog formats
     public abstract class AnalogFormat
     {
@@ -32,6 +37,7 @@ namespace AnalogTVFilter
         protected int[] boundPoints;
 
         public int Scanlines { get { return scanlines; } }
+        public int VideoScanlines { get { return videoScanlines; } }
         public double Framerate { get { return isInterlaced ? framerate / 2f : framerate; } }
         public double SubcarrierFrequency { get { return chromaCarrierFrequency; } }
         public int[] BoundaryPoints { get { return boundPoints; } }
@@ -98,7 +104,7 @@ namespace AnalogTVFilter
             realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
         }
 
-        public abstract double[] Encode(Surface surface);
-        public abstract Surface Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analog feeling
+        public abstract double[] Encode(ImageData surface);
+        public abstract ImageData Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analog feeling
     }
 }

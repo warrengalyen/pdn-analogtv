@@ -1,5 +1,4 @@
-﻿using PaintDotNet;
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace AnalogTVFilter
 {
@@ -35,7 +34,7 @@ namespace AnalogTVFilter
         private readonly double[] SubCarrierUpperFrequencies = { 2.0 * 350000,   // Db
                                                                  2.0 * 506000 }; // Dr
 
-        public override Surface Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; // Start points of the active parts
             byte R = 0;
@@ -103,9 +102,12 @@ namespace AnalogTVFilter
                 DrSignal[i] = 400.0 * (DrSignalFinal[finalSignal.Length - 1 - i].Imaginary);
             }
 
-            Surface writeToSurface = new Surface(activeWidth, videoScanlines);
+            ImageData writeToSurface = new ImageData();
+            writeToSurface.Width = activeWidth;
+            writeToSurface.Height = videoScanlines;
+            writeToSurface.Data = new byte[activeWidth * videoScanlines * 4];
 
-            MemoryBlock surfaceColors = writeToSurface.Scan0;
+            byte[] surfaceColors = writeToSurface.Data;
             int currentScanline;
             Random rng = new Random();
             int curjit = 0;
@@ -147,7 +149,7 @@ namespace AnalogTVFilter
             return writeToSurface;
         }
 
-        public override double[] Encode(Surface surface)
+        public override double[] Encode(ImageData surface)
         {
             // To get a good analog feel, we must limit the vertical resolution; the horizontal
             // resolution will be limited as we decode the distorted signal.
@@ -167,9 +169,6 @@ namespace AnalogTVFilter
             int remainingSync = 0;
             double sampleTime = realActiveTime / (double)surface.Width;
 
-            Surface wrkSrf = new Surface(surface.Width, videoScanlines);
-            wrkSrf.FitSurface(ResamplingAlgorithm.SuperSampling, surface);
-
             boundaryPoints[0] = 0; // Beginning of the signal
             boundaryPoints[videoScanlines] = signalLen; // End of the signal
             for (int i = 1; i < videoScanlines; i++) // Rest of the signal
@@ -185,7 +184,7 @@ namespace AnalogTVFilter
             }
 
             double instantPhase = 0.0;
-            MemoryBlock surfaceColors = wrkSrf.Scan0;
+            byte[] surfaceColors = surface.Data;
             int currentScanline;
             for (int i = 0; i < videoScanlines; i++)
             {
