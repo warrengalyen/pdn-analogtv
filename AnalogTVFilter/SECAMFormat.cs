@@ -1,5 +1,36 @@
 ﻿using System.Numerics;
 
+
+/*
+ * Implementation of the SECAM format
+ * 
+ * Dependency: MathUtil.cs
+ * 
+ * 2023 Warren Galyen
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+
 namespace AnalogTVFilter
 {
     // The SECAM format, used in France, etc.
@@ -62,6 +93,7 @@ namespace AnalogTVFilter
                 activeSignalStarts[i] = (int)((((double)i * (double)signal.Length) / (double)videoScanlines) + ((scanlineTime - realActiveTime) / (2 * realActiveTime)) * activeWidth);
             }
 
+            /**/ //FFT based
             Complex[] signalFT = MathUtil.FourierTransform(signal, 1);
             double specRate = (2.0 * Math.PI * sampleRate) / signalFT.Length;
             signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); // Restrict bandwidth to the actual broadcast bandwidth
@@ -88,6 +120,32 @@ namespace AnalogTVFilter
                 DbSignalFinal[i] = (DbSignalIFTDiff[i] * Complex.Conjugate(DbSignalIFT[i])) / AngFrequencyShifts[0];
                 DrSignalFinal[i] = (DrSignalIFTDiff[i] * Complex.Conjugate(DrSignalIFT[i])) / AngFrequencyShifts[1];
             }
+            //*/
+
+            /*/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
+            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < colfir.Length; i++)
+            {
+                colfir[i] *= 2.0;
+            }
+            double[] notchfir = new double[colfir.Length];
+            notchfir[0] = 1.0 - colfir[0];
+            for (int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -colfir[i];
+            }
+            signal = MathsUtil.FIRFilter(signal, mainfir);
+            double[] DbSignal = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
+            double[] DrSignal = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+            signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            DbSignal = MathsUtil.FIRFilter(DbSignal, dbfir);
+            DrSignal = MathsUtil.FIRFilter(DrSignal, drfir);
+            //*/
+
             DbSignalFinal = MathUtil.ShiftFilter(DbSignalFinal, 5.0E-7 * sampleRate, 0.5, 1.0);
             DrSignalFinal = MathUtil.ShiftFilter(DrSignalFinal, 5.0E-7 * sampleRate, 0.5, 1.0);
             double[] DbSignal = new double[signal.Length];

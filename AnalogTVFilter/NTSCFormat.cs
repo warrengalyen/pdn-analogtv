@@ -1,26 +1,53 @@
-﻿using System.Numerics;
+﻿/*
+ * Implementation of the NTSC format
+ * 
+ * Dependency: MathUtil.cs
+ * 
+ * 2023 Warren Galyen
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 
 namespace AnalogTVFilter
 {
+    // The NTSC format, used in America, etc.
     public class NTSCFormat : AnalogFormat
     {
-        // The NTSC format, used in America, etc.
         public NTSCFormat() : base(0.299, // R to Y
-                           0.587, // G to Y
-                           0.114, // B to Y
-                           0.436, // Q maximum
-                           0.615, // I maximum
-                           33.0 * (Math.PI / 180.0), // Chroma conversion phase relative to YUV
-                           4.2e+6, // Main bandwidth
-                           1e+6, // Side bandwidth
-                           1.3e+6, // Color bandwidth lower part
-                           0.62e+6, // Color bandwidth upper part
-                           3579545.0, // Color subcarrier frequency
-                           525, // Total scanlines
-                           480, // Visible scanlines
-                           59.94005994, // Nominal framerate
-                           5.26555e-5, // Active video time
-                           true) // Interlaced?
+                                   0.587, // G to Y
+                                   0.114, // B to Y
+                                   0.436, // Q maximum
+                                   0.615, // I maximum
+                                   33.0 * (Math.PI / 180.0), // Chroma conversion phase relative to YUV
+                                   4.2e+6, // Main bandwidth
+                                   1e+6, // Side bandwidth
+                                   1.3e+6, // Color bandwidth lower part
+                                   0.62e+6, // Color bandwidth upper part
+                                   3579545.0, // Color subcarrier frequency
+                                   525, // Total scanlines
+                                   480, // Visible scanlines
+                                   59.94005994, // Nominal framerate
+                                   5.26555e-5, // Active video time
+                                   true) // Interlaced?
         { }
 
         public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
@@ -44,9 +71,10 @@ namespace AnalogTVFilter
             bool inclQ = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclI = ((channelFlags & 0x4) == 0) ? false : true;
 
+            /*/ //FFT based
             Complex[] signalFT = MathUtil.FourierTransform(signal, 1);
-            signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); // Restrict bandwidth to the actual broadcast bandwidth
-            Complex[] QcolorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, chromaCarrierFrequency, 2 * chromaBandwidthUpper, resonance, blendStr); // Extract color information
+            signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
+            Complex[] QcolorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, chromaCarrierFrequency, 2 * chromaBandwidthUpper, resonance, blendStr); //Extract color information
             Complex[] IcolorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr); //Q has less resolution than I
             QcolorSignalFT = MathUtil.ShiftArrayInterp(QcolorSignalFT, ((chromaCarrierFrequency - 306820.0) / sampleRate) * QcolorSignalFT.Length); //apologies for the fudge factor
             IcolorSignalFT = MathUtil.ShiftArrayInterp(IcolorSignalFT, ((((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency + 33180.0) / sampleRate) * IcolorSignalFT.Length); //apologies for the fudge factor
@@ -63,6 +91,40 @@ namespace AnalogTVFilter
                 QSignal[i] = 2.0 * (-c * (QSignalIFT[finalSignal.Length - 1 - i].Imaginary) + s * (QSignalIFT[finalSignal.Length - 1 - i].Real));
                 ISignal[i] = 2.0 * (c * (ISignalIFT[finalSignal.Length - 1 - i].Real) + s * (ISignalIFT[finalSignal.Length - 1 - i].Imaginary));
             }
+            //*/
+
+            /**/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] qfir = MathUtil.MakeFIRFilter(sampleRate, 32, 0.0, 2.0 * chromaBandwidthUpper, resonance); // Q has less resolution than I
+            double[] ifir = MathUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < qfir.Length; i++)
+            {
+                qfir[i] *= 2.0;
+            }
+            for (int i = 1; i < ifir.Length; i++)
+            {
+                ifir[i] *= 2.0;
+            }
+            double[] notchfir = new double[qfir.Length];
+            notchfir[0] = 1.0 - qfir[0];
+            for (int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -qfir[i];
+            }
+            signal = MathUtil.FIRFilter(signal, mainfir);
+            double[] QSignal = MathUtil.FIRFilterCrosstalkShift(signal, qfir, crosstalk, sampleTime, carrierAngFreq);
+            double[] ISignal = MathUtil.FIRFilterCrosstalkShift(signal, ifir, crosstalk, sampleTime, carrierAngFreq);
+            double time = 0.0;
+            for (int i = 0; i < signal.Length; i++)
+            {
+                time = i * sampleTime;
+                QSignal[i] = QSignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase);
+                ISignal[i] = ISignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase);
+            }
+            signal = MathUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            QSignal = MathUtil.FIRFilter(QSignal, qfir);
+            ISignal = MathUtil.FIRFilter(ISignal, ifir);
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;

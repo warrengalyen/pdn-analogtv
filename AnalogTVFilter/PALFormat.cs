@@ -1,4 +1,31 @@
-﻿using System.Numerics;
+﻿/*
+ * Implementation of the PAL format
+ * 
+ * Dependency: MathUtil.cs
+ * 
+ * 2023 Warren Galyen
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 
 namespace AnalogTVFilter
 {
@@ -42,6 +69,7 @@ namespace AnalogTVFilter
             bool inclU = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclV = ((channelFlags & 0x4) == 0) ? false : true;
 
+            /*/ //FFT based
             Complex[] signalFT = MathUtil.FourierTransform(signal, 1);
             signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
             Complex[] colorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr); //Extract color information
@@ -58,6 +86,39 @@ namespace AnalogTVFilter
                 USignal[i] = -2.0 * USignalIFT[finalSignal.Length - 1 - i].Imaginary;
                 VSignal[i] = 2.0 * USignalIFT[finalSignal.Length - 1 - i].Real;
             }
+            //*/
+
+            /**/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] colfir = MathUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < colfir.Length; i++)
+            {
+                colfir[i] *= 2.0;
+            }
+            double[] notchfir = new double[colfir.Length];
+            notchfir[0] = 1.0 - colfir[0];
+            for (int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -colfir[i];
+            }
+            signal = MathUtil.FIRFilter(signal, mainfir);
+            double[] colsignal = MathUtil.FIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, carrierAngFreq);
+            double[] USignal = new double[signal.Length];
+            double[] VSignal = new double[signal.Length];
+
+            double time = 0.0;
+            for (int i = 0; i < signal.Length; i++)
+            {
+                time = i * sampleTime;
+                USignal[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI);
+                VSignal[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI);
+            }
+
+            signal = MathUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            USignal = MathUtil.FIRFilter(USignal, colfir);
+            VSignal = MathUtil.FIRFilter(VSignal, colfir);
+            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;
