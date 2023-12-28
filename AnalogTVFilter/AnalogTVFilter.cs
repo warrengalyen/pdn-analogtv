@@ -43,7 +43,7 @@ namespace AnalogTVFilter
         public string? DisplayName => "Analog TV";
         public string? Author => "Warren Galyen";
         public string? Copyright => "2023 Mechanika Design";
-        public Version? Version => new Version("0.5");
+        public Version? Version => new Version("0.6");
         public Uri? WebsiteUri => new Uri("https://github.com/warrengalyen/pdn-analogtv");
     }
 
