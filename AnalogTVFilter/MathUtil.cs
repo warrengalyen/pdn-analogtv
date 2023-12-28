@@ -35,10 +35,11 @@ namespace AnalogTVFilter
     public static class MathUtil
     {
         // The difference from zero or one before explicit calculation of attenuation is halted, because there is no point
-        private static readonly double passCalcTolerance = 0.00001;
+        private static readonly double passCalcTolerance = 0.0001;
 
         // Size of the parallelization chunks
         private static readonly int chunkSize = 4096;
+        public static readonly double sqrt2 = Math.Sqrt(2.0);
 
         private unsafe struct FTKernelData
         {

@@ -52,6 +52,7 @@ namespace AnalogTVFilter
     {
         public enum PropertyNames
         {
+            Format,
             Interlacing,
             Noise,
             PhaseNoise,
@@ -248,11 +249,11 @@ namespace AnalogTVFilter
             DistortSignal(signal, signal.Length * format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
             ImageData outIDat = format.Decode(signal, wrkWidth, crosstalk, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
             Surface destSurf = new Surface(surrRect.Size);
-            destSurf.FitSurface(ResamplingAlgorithm.AdaptiveHighQuality, wrkSrf);
             for (int i = 0; i < inIDat.Data.Length; i++)
             {
                 wrkblk[i] = outIDat.Data[i];
             }
+            destSurf.FitSurface(ResamplingAlgorithm.AdaptiveHighQuality, wrkSrf);
             if (length <= 0) return;
             for (int i = startIndex; i < startIndex + length; i++)
             {

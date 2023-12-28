@@ -1,7 +1,4 @@
-﻿using System.Numerics;
-
-
-/*
+﻿/*
  * Implementation of the SECAM format
  * 
  * Dependency: MathUtil.cs
@@ -30,7 +27,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-
 namespace AnalogTVFilter
 {
     // The SECAM format, used in France, etc.
@@ -54,20 +50,21 @@ namespace AnalogTVFilter
                                    true) // Interlaced?
         { }
 
-        private readonly double[] SubCarrierFrequencies = { 4250000,   // Db
-                                                            4406250 }; // Dr
-        private readonly double[] SubCarrierAngFrequencies = { 4250000 * 2.0 * Math.PI,   // Db
-                                                               4406250 * 2.0 * Math.PI }; // Dr
-        private readonly double[] AngFrequencyShifts = { 230000 * 2.0 * Math.PI,   // Db
-                                                         280000 * 2.0 * Math.PI }; // Dr
-        private readonly double[] SubCarrierLowerFrequencies = { 2.0 * 506000,   // Db
-                                                                 2.0 * 350000 }; // Dr
-        private readonly double[] SubCarrierUpperFrequencies = { 2.0 * 350000,   // Db
-                                                                 2.0 * 506000 }; // Dr
+        private readonly double[] SubCarrierFrequencies = { 4250000,   //Db
+                                                            4406250 }; //Dr
+        private readonly double[] SubCarrierAngFrequencies = { 4250000 * 2.0 * Math.PI,   //Db
+                                                               4406250 * 2.0 * Math.PI }; //Dr
+        private readonly double[] AngFrequencyShifts = { 230000 * 2.0 * Math.PI,   //Db
+                                                         280000 * 2.0 * Math.PI }; //Dr
+        private readonly double[] SubCarrierLowerFrequencies = { 2.0 * 506000,   //Db
+                                                                 2.0 * 350000 }; //Dr
+        private readonly double[] SubCarrierUpperFrequencies = { 2.0 * 350000,   //Db
+                                                                 2.0 * 506000 }; //Dr
+        private readonly double SubCarrierStartTime = 0.4e-6;
 
         public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
         {
-            int[] activeSignalStarts = new int[videoScanlines]; // Start points of the active parts
+            int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
             byte G = 0;
             byte B = 0;
@@ -78,7 +75,7 @@ namespace AnalogTVFilter
             int pos = 0;
             int DbPos = 0;
             int DrPos = 0;
-            int componentAlternate = 0; // SECAM alternates between Db and Dr with each scanline
+            int componentAlternate = 0; //SECAM alternates between Db and Dr with each scanline
             double sigNum = 0.0;
             double freqPoint = 0.0;
             double sampleRate = signal.Length / frameTime;
@@ -88,22 +85,22 @@ namespace AnalogTVFilter
             bool inclDb = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclDr = ((channelFlags & 0x4) == 0) ? false : true;
 
-            for (int i = 0; i < videoScanlines; i++) // Where the active signal starts
+            for (int i = 0; i < videoScanlines; i++) //Where the active signal starts
             {
                 activeSignalStarts[i] = (int)((((double)i * (double)signal.Length) / (double)videoScanlines) + ((scanlineTime - realActiveTime) / (2 * realActiveTime)) * activeWidth);
             }
 
-            /**/ //FFT based
+            /*/ //FFT based
             Complex[] signalFT = MathUtil.FourierTransform(signal, 1);
             double specRate = (2.0 * Math.PI * sampleRate) / signalFT.Length;
-            signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); // Restrict bandwidth to the actual broadcast bandwidth
-            Complex[] DbColorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0) + SubCarrierFrequencies[0], SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance, blendStr); // Extract color information
+            signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
+            Complex[] DbColorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0) + SubCarrierFrequencies[0], SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance, blendStr); //Extract color information
             Complex[] DrColorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0) + SubCarrierFrequencies[1], SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance, blendStr);
-            DbColorSignalFT = MathUtil.ShiftArrayInterp(DbColorSignalFT, (3916800.0 / sampleRate) * DbColorSignalFT.Length); // apologies for the fudge factor
-            DrColorSignalFT = MathUtil.ShiftArrayInterp(DrColorSignalFT, (4060800.0 / sampleRate) * DrColorSignalFT.Length); // apologies for the fudge factor
+            DbColorSignalFT = MathUtil.ShiftArrayInterp(DbColorSignalFT, (3916800.0 / sampleRate) * DbColorSignalFT.Length); //apologies for the fudge factor
+            DrColorSignalFT = MathUtil.ShiftArrayInterp(DrColorSignalFT, (4060800.0 / sampleRate) * DrColorSignalFT.Length); //apologies for the fudge factor
             Complex[] DbSignalFTDiff = new Complex[DbColorSignalFT.Length];
             Complex[] DrSignalFTDiff = new Complex[DrColorSignalFT.Length];
-            for (int i = -DbColorSignalFT.Length / 2; i < DbColorSignalFT.Length / 2; i++)
+            for(int i = -DbColorSignalFT.Length / 2; i < DbColorSignalFT.Length / 2; i++)
             {
                 freqPoint = i * specRate;
                 DbSignalFTDiff[(i + DbColorSignalFT.Length) % DbColorSignalFT.Length] = DbColorSignalFT[(i + DbColorSignalFT.Length) % DbColorSignalFT.Length] * Complex.ImaginaryOne * freqPoint;
@@ -120,32 +117,6 @@ namespace AnalogTVFilter
                 DbSignalFinal[i] = (DbSignalIFTDiff[i] * Complex.Conjugate(DbSignalIFT[i])) / AngFrequencyShifts[0];
                 DrSignalFinal[i] = (DrSignalIFTDiff[i] * Complex.Conjugate(DrSignalIFT[i])) / AngFrequencyShifts[1];
             }
-            //*/
-
-            /*/ //FIR based
-            double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
-            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
-            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
-            for (int i = 1; i < colfir.Length; i++)
-            {
-                colfir[i] *= 2.0;
-            }
-            double[] notchfir = new double[colfir.Length];
-            notchfir[0] = 1.0 - colfir[0];
-            for (int i = 1; i < notchfir.Length; i++)
-            {
-                notchfir[i] = -colfir[i];
-            }
-            signal = MathsUtil.FIRFilter(signal, mainfir);
-            double[] DbSignal = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
-            double[] DrSignal = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
-            signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
-            DbSignal = MathsUtil.FIRFilter(DbSignal, dbfir);
-            DrSignal = MathsUtil.FIRFilter(DrSignal, drfir);
-            //*/
-
             DbSignalFinal = MathUtil.ShiftFilter(DbSignalFinal, 5.0E-7 * sampleRate, 0.5, 1.0);
             DrSignalFinal = MathUtil.ShiftFilter(DrSignalFinal, 5.0E-7 * sampleRate, 0.5, 1.0);
             double[] DbSignal = new double[signal.Length];
@@ -159,6 +130,68 @@ namespace AnalogTVFilter
                 DbSignal[i] = 400.0 * (DbSignalFinal[finalSignal.Length - 1 - i].Imaginary);
                 DrSignal[i] = 400.0 * (DrSignalFinal[finalSignal.Length - 1 - i].Imaginary);
             }
+            //*/
+
+            /**/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] dbfir = MathUtil.MakeFIRFilter(sampleRate, 64, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
+            double[] drfir = MathUtil.MakeFIRFilter(sampleRate, 64, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
+            double[] colfir = MathUtil.MakeFIRFilter(sampleRate, 64, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < colfir.Length; i++)
+            {
+                colfir[i] *= 2.0;
+            }
+            double[] notchfir = new double[colfir.Length];
+            notchfir[0] = 1.0 - colfir[0];
+            for (int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -colfir[i];
+            }
+            signal = MathUtil.FIRFilter(signal, mainfir);
+            double[] DbSignal = MathUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
+            double[] DrSignal = MathUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+
+            double time = 0.0;
+            double DbDecodeAngFreq = SubCarrierAngFrequencies[0];
+            double DrDecodeAngFreq = SubCarrierAngFrequencies[1];
+            double DbDecodePhase = 0.0;
+            double DrDecodePhase = 0.0;
+            double DbDeriv = 0.0;
+            double DrDeriv = 0.0;
+            double DbLast = 0.0;
+            double DrLast = 0.0;
+            double curDb = 0.0;
+            double curDr = 0.0;
+            double DbFreqShift = 0.0;
+            double DrFreqShift = 0.0;
+            double DbLastFreqShift = 0.0;
+            double DrLastFreqShift = 0.0;
+            for (int i = 0; i < signal.Length; i++)
+            {
+                DbDeriv = DbSignal[i] - DbLast;
+                DrDeriv = DrSignal[i] - DrLast;
+                DbLast = DbSignal[i];
+                DrLast = DrSignal[i];
+                curDb = (DbDecodeAngFreq - SubCarrierAngFrequencies[0]) / AngFrequencyShifts[0];
+                curDr = (DrDecodeAngFreq - SubCarrierAngFrequencies[1]) / AngFrequencyShifts[1];
+                DbSignal[i] = curDb;
+                DrSignal[i] = curDr;
+                DbFreqShift = -(0.115 * Math.Cos(DbDecodePhase) * DbDeriv) - (0.115 * DbDecodeAngFreq * Math.Sin(DbDecodePhase) * DbLast);
+                DrFreqShift = -(0.115 * Math.Cos(DrDecodePhase) * DrDeriv) - (0.115 * DrDecodeAngFreq * Math.Sin(DrDecodePhase) * DrLast);
+                DbDecodeAngFreq += 30.0 * (DbFreqShift - DbLastFreqShift);
+                DrDecodeAngFreq += 30.0 * (DrFreqShift - DrLastFreqShift);
+                DbDecodePhase += sampleTime * DbDecodeAngFreq;
+                DrDecodePhase += sampleTime * DrDecodeAngFreq;
+                DbLastFreqShift = DbFreqShift;
+                DrLastFreqShift = DrFreqShift;
+            }
+
+
+            signal = MathUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            DbSignal = MathUtil.FIRFilter(DbSignal, dbfir);
+            DrSignal = MathUtil.FIRFilter(DrSignal, drfir);
+            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;
@@ -244,6 +277,7 @@ namespace AnalogTVFilter
             double instantPhase = 0.0;
             byte[] surfaceColors = surface.Data;
             int currentScanline;
+            int subcarrierstartind = (int)((SubCarrierStartTime / realActiveTime) * ((double)surface.Width));
             for (int i = 0; i < videoScanlines; i++)
             {
                 instantPhase = 0.0;
@@ -257,13 +291,19 @@ namespace AnalogTVFilter
                     componentAlternate = 1;
                 }
                 else componentAlternate = 0;
-                for (int j = 0; j < activeSignalStarts[i]; j++) // Front porch, ignore sync signal because we don't see its results
+                for (int j = 0; j < subcarrierstartind; j++) // Front porch, ignore sync signal because we don't see its results
                 {
                     signalOut[pos] = 0.0;
                     pos++;
                     time = pos * sampleTime;
                 }
-                instantPhase = 0.0;
+                for (int j = subcarrierstartind; j < activeSignalStarts[i]; j++) // Front porch, ignore sync signal because we don't see its results
+                {
+                    instantPhase += sampleTime * SubCarrierAngFrequencies[componentAlternate];
+                    signalOut[pos] = 0.115 * Math.Cos(instantPhase); // Add chroma lead-in via FM
+                    pos++;
+                    time = pos * sampleTime;
+                }
                 for (int j = 0; j < surface.Width; j++) // Active signal
                 {
                     signalOut[pos] = 0.0;
@@ -276,7 +316,7 @@ namespace AnalogTVFilter
                     Db = RGBtoYUVConversionMatrix[3] * R + RGBtoYUVConversionMatrix[4] * G + RGBtoYUVConversionMatrix[5] * B; // Encode Db and Dr
                     Dr = RGBtoYUVConversionMatrix[6] * R + RGBtoYUVConversionMatrix[7] * G + RGBtoYUVConversionMatrix[8] * B;
                     instantPhase += sampleTime * (SubCarrierAngFrequencies[componentAlternate] + AngFrequencyShifts[componentAlternate] * (componentAlternate == 0 ? Db : Dr));
-                    signalOut[pos] += RGBtoYUVConversionMatrix[0] * R + RGBtoYUVConversionMatrix[1] * G + RGBtoYUVConversionMatrix[2] * B; //Add luma straightforwardly
+                    signalOut[pos] += RGBtoYUVConversionMatrix[0] * R + RGBtoYUVConversionMatrix[1] * G + RGBtoYUVConversionMatrix[2] * B; // Add luma straightforwardly
                     signalOut[pos] += 0.115 * Math.Cos(instantPhase); // Add chroma via FM
                     pos++;
                     time = pos * sampleTime;

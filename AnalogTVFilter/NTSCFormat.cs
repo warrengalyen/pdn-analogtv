@@ -119,8 +119,8 @@ namespace AnalogTVFilter
             for (int i = 0; i < signal.Length; i++)
             {
                 time = i * sampleTime;
-                QSignal[i] = QSignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase);
-                ISignal[i] = ISignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase);
+                QSignal[i] = QSignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase) * MathUtil.sqrt2;
+                ISignal[i] = ISignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase) * MathUtil.sqrt2;
             }
             signal = MathUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
             QSignal = MathUtil.FIRFilter(QSignal, qfir);
