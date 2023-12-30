@@ -63,7 +63,7 @@ namespace AnalogTVFilter
             int pos = 0;
             int posdel = 0;
             double sigNum = 0.0;
-            double sampleRate = signal.Length / frameTime;
+            double sampleRate = ((double)signal.Length * (((double)scanlines) / ((double)videoScanlines))) / frameTime; // Correction for the fact that the signal we've created only has active scanlines.
             double blendStr = 1.0 - crosstalk;
             double c = Math.Cos(chromaPhase);
             double s = Math.Sin(chromaPhase);
@@ -71,33 +71,10 @@ namespace AnalogTVFilter
             bool inclQ = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclI = ((channelFlags & 0x4) == 0) ? false : true;
 
-            /*/ //FFT based
-            Complex[] signalFT = MathUtil.FourierTransform(signal, 1);
-            signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
-            Complex[] QcolorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, chromaCarrierFrequency, 2 * chromaBandwidthUpper, resonance, blendStr); //Extract color information
-            Complex[] IcolorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr); //Q has less resolution than I
-            QcolorSignalFT = MathUtil.ShiftArrayInterp(QcolorSignalFT, ((chromaCarrierFrequency - 306820.0) / sampleRate) * QcolorSignalFT.Length); //apologies for the fudge factor
-            IcolorSignalFT = MathUtil.ShiftArrayInterp(IcolorSignalFT, ((((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency + 33180.0) / sampleRate) * IcolorSignalFT.Length); //apologies for the fudge factor
-            Complex[] QSignalIFT = MathUtil.InverseFourierTransform(QcolorSignalFT);
-            Complex[] ISignalIFT = MathUtil.InverseFourierTransform(IcolorSignalFT);
-            double[] QSignal = new double[signal.Length];
-            double[] ISignal = new double[signal.Length];
-            signalFT = MathUtil.NotchFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr);
-            Complex[] finalSignal = MathUtil.InverseFourierTransform(signalFT);
-
-            for (int i = 0; i < signal.Length; i++)
-            {
-                signal[i] = 1.0 * finalSignal[finalSignal.Length - 1 - i].Real;
-                QSignal[i] = 2.0 * (-c * (QSignalIFT[finalSignal.Length - 1 - i].Imaginary) + s * (QSignalIFT[finalSignal.Length - 1 - i].Real));
-                ISignal[i] = 2.0 * (c * (ISignalIFT[finalSignal.Length - 1 - i].Real) + s * (ISignalIFT[finalSignal.Length - 1 - i].Imaginary));
-            }
-            //*/
-
-            /**/ //FIR based
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] qfir = MathUtil.MakeFIRFilter(sampleRate, 32, 0.0, 2.0 * chromaBandwidthUpper, resonance); // Q has less resolution than I
-            double[] ifir = MathUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] qfir = MathUtil.MakeFIRFilter(sampleRate, 80, 0.0, 2.0 * chromaBandwidthUpper, resonance); //Q has less resolution than I
+            double[] ifir = MathUtil.MakeFIRFilter(sampleRate, 80, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
             for (int i = 1; i < qfir.Length; i++)
             {
                 qfir[i] *= 2.0;
@@ -202,7 +179,7 @@ namespace AnalogTVFilter
 
             byte[] surfaceColors = surface.Data;
             int currentScanline;
-            for (int i = 0; i < videoScanlines; i++)
+            for (int i = 0; i < videoScanlines; i++)  // Only generate active scanlines
             {
                 if (i * 2 >= videoScanlines) // Simulate interlacing
                 {

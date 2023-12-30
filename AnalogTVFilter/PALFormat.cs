@@ -41,7 +41,7 @@ namespace AnalogTVFilter
                                   5e+6, // Main bandwidth
                                   0.75e+6, // Side bandwidth
                                   1.3e+6, // Color bandwidth lower part
-                                  0.6e+6, // Color bandwidth upper part
+                                  0.57e+6, // Color bandwidth upper part
                                   4433618.75, // Color subcarrier frequency
                                   625, // Total scanlines
                                   576, // Visible scanlines
@@ -63,35 +63,15 @@ namespace AnalogTVFilter
             int pos = 0;
             int posdel = 0;
             double sigNum = 0.0;
-            double sampleRate = signal.Length / frameTime;
+            double sampleRate = ((double)signal.Length * (((double)scanlines) / ((double)videoScanlines))) / frameTime; // Correction for the fact that the signal we've created only has active scanlines.
             double blendStr = 1.0 - crosstalk;
             bool inclY = ((channelFlags & 0x1) == 0) ? false : true;
             bool inclU = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclV = ((channelFlags & 0x4) == 0) ? false : true;
 
-            /*/ //FFT based
-            Complex[] signalFT = MathUtil.FourierTransform(signal, 1);
-            signalFT = MathUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
-            Complex[] colorSignalFT = MathUtil.BandPassFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr); //Extract color information
-            colorSignalFT = MathUtil.ShiftArrayInterp(colorSignalFT, ((((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency + 2404.0) / sampleRate) * colorSignalFT.Length); // apologies for the fudge factor
-            Complex[] USignalIFT = MathUtil.InverseFourierTransform(colorSignalFT);
-            double[] USignal = new double[signal.Length];
-            double[] VSignal = new double[signal.Length];
-            signalFT = MathUtil.NotchFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr);
-            Complex[] finalSignal = MathUtil.InverseFourierTransform(signalFT);
-
-            for (int i = 0; i < signal.Length; i++)
-            {
-                signal[i] = 1.0 * finalSignal[finalSignal.Length - 1 - i].Real;
-                USignal[i] = -2.0 * USignalIFT[finalSignal.Length - 1 - i].Imaginary;
-                VSignal[i] = 2.0 * USignalIFT[finalSignal.Length - 1 - i].Real;
-            }
-            //*/
-
-            /**/ //FIR based
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] colfir = MathUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] colfir = MathUtil.MakeFIRFilter(sampleRate, 80, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
             for (int i = 1; i < colfir.Length; i++)
             {
                 colfir[i] *= 2.0;
@@ -106,20 +86,21 @@ namespace AnalogTVFilter
             double[] colsignal = MathUtil.FIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, carrierAngFreq);
             double[] USignal = new double[signal.Length];
             double[] VSignal = new double[signal.Length];
+            double[] USignalPreAlt = new double[signal.Length];
+            double[] VSignalPreAlt = new double[signal.Length];
 
             double time = 0.0;
-            
+
             for (int i = 0; i < signal.Length; i++)
             {
                 time = i * sampleTime;
-                USignal[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI) * MathUtil.sqrt2;
-                VSignal[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI) * MathUtil.sqrt2;
+                USignalPreAlt[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI) * MathUtil.sqrt2;
+                VSignalPreAlt[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI) * MathUtil.sqrt2;
             }
 
             signal = MathUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
-            USignal = MathUtil.FIRFilter(USignal, colfir);
-            VSignal = MathUtil.FIRFilter(VSignal, colfir);
-            //*/
+            USignalPreAlt = MathUtil.FIRFilter(USignalPreAlt, colfir);
+            VSignalPreAlt = MathUtil.FIRFilter(VSignalPreAlt, colfir);
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;
@@ -131,19 +112,75 @@ namespace AnalogTVFilter
                 activeSignalStarts[i] = (int)((((double)i * (double)signal.Length) / (double)videoScanlines) + ((scanlineTime - realActiveTime) / (2 * realActiveTime)) * activeWidth);
             }
 
-            for (int i = 0; i < videoScanlines; i++) // Account for phase alternation
+            if (isInterlaced) // Account for phase alternation
             {
-                if ((i % 2) == 0) continue;
-                pos = activeSignalStarts[i];
-                posdel = activeSignalStarts[i - 1];
-                for (int j = 0; j < writeToSurface.Width; j++)
+                double alt = 0.0;
+                pos = activeSignalStarts[0];
+                for (int j = 0; j < writeToSurface.Width; j++) //We assume the chroma signal in all blanking periods is zero
                 {
-                    USignal[pos] = (USignal[posdel] + USignal[pos]) / 2.0;
-                    VSignal[pos] = (VSignal[posdel] - VSignal[pos]) / 2.0;
-                    USignal[posdel] = USignal[pos];
-                    VSignal[posdel] = VSignal[pos];
+                    USignal[pos] = USignalPreAlt[pos] / 2.0;
+                    VSignal[pos] = VSignalPreAlt[pos] / 2.0;
                     pos++;
                     posdel++;
+                }
+                for (int i = 1; i < videoScanlines / 2; i++) //Simulate a delay line
+                {
+                    pos = activeSignalStarts[i];
+                    posdel = activeSignalStarts[i - 1];
+                    alt = (i % 2) == 0 ? -1.0 : 1.0;
+                    for (int j = 0; j < writeToSurface.Width; j++)
+                    {
+                        USignal[pos] = (USignalPreAlt[posdel] + USignalPreAlt[pos]) / 2.0;
+                        VSignal[pos] = alt * (VSignalPreAlt[posdel] - VSignalPreAlt[pos]) / 2.0;
+                        pos++;
+                        posdel++;
+                    }
+                }
+                pos = activeSignalStarts[videoScanlines / 2]; // If interlaced, there would be a large gap between one field and the next
+                for (int j = 0; j < writeToSurface.Width; j++)
+                {
+                    USignal[pos] = USignalPreAlt[pos] / 2.0;
+                    VSignal[pos] = VSignalPreAlt[pos] / 2.0;
+                    pos++;
+                    posdel++;
+                }
+                for (int i = (videoScanlines / 2) + 1; i < videoScanlines; i++) // Simulate a delay line
+                {
+                    pos = activeSignalStarts[i];
+                    posdel = activeSignalStarts[i - 1];
+                    alt = (i % 2) == 0 ? -1.0 : 1.0;
+                    for (int j = 0; j < writeToSurface.Width; j++)
+                    {
+                        USignal[pos] = (USignalPreAlt[posdel] + USignalPreAlt[pos]) / 2.0;
+                        VSignal[pos] = alt * (VSignalPreAlt[posdel] - VSignalPreAlt[pos]) / 2.0;
+                        pos++;
+                        posdel++;
+                    }
+                }
+            }
+            else
+            {
+                double alt = 0.0;
+                pos = activeSignalStarts[0];
+                for (int j = 0; j < writeToSurface.Width; j++) // We assume the chroma signal in all blanking periods is zero
+                {
+                    USignal[pos] = USignalPreAlt[pos] / 2.0;
+                    VSignal[pos] = VSignalPreAlt[pos] / 2.0;
+                    pos++;
+                    posdel++;
+                }
+                for (int i = 1; i < videoScanlines; i++) // Simulate a delay line
+                {
+                    pos = activeSignalStarts[i];
+                    posdel = activeSignalStarts[i - 1];
+                    alt = (i % 2) == 0 ? -1.0 : 1.0;
+                    for (int j = 0; j < writeToSurface.Width; j++)
+                    {
+                        USignal[pos] = (USignalPreAlt[posdel] + USignalPreAlt[pos]) / 2.0;
+                        VSignal[pos] = alt * (VSignalPreAlt[posdel] - VSignalPreAlt[pos]) / 2.0;
+                        pos++;
+                        posdel++;
+                    }
                 }
             }
 
@@ -195,7 +232,7 @@ namespace AnalogTVFilter
             double time = 0;
             int pos = 0;
             int polarity = 0;
-            double phaseAlternate = 1.0; //Why this is called PAL in the first place
+            double phaseAlternate = 1.0; // Why this is called PAL in the first place
             int remainingSync = 0;
             double sampleTime = realActiveTime / (double)surface.Width;
 
@@ -215,14 +252,14 @@ namespace AnalogTVFilter
 
             byte[] surfaceColors = surface.Data;
             int currentScanline;
-            for (int i = 0; i < videoScanlines; i++)
+            for (int i = 0; i < videoScanlines; i++) // Only generate active scanlines
             {
                 if (i * 2 >= videoScanlines) // Simulate interlacing
                 {
                     polarity = 1;
                 }
                 currentScanline = isInterlaced ? (i * 2 + polarity) % videoScanlines : i;
-                if ((i % 2) == 1) //Do phase alternation
+                if ((i % 2) == 1) // Do phase alternation
                 {
                     phaseAlternate = -1.0;
                 }
