@@ -1,6 +1,5 @@
 ﻿using PaintDotNet;
 using PaintDotNet.Effects;
-using PaintDotNet.Imaging;
 using PaintDotNet.IndirectUI;
 using PaintDotNet.PropertySystem;
 using System.Drawing;
@@ -76,9 +75,15 @@ namespace AnalogTVFilter
         bool doY;
         bool doU;
         bool doV;
-        static IBitmapSource nullsource = null;
+        static Image iconImage;
 
-        public AnalogTVFilter() : base("Analog TV", nullsource, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable, RenderingSchedule = EffectRenderingSchedule.None })
+        static AnalogTVFilter()
+        {
+            System.Resources.ResourceManager resm = new System.Resources.ResourceManager("AnalogTVFilter.resources", typeof(AnalogTVFilter).Assembly);
+            iconImage = (Bitmap)resm.GetObject("icon");
+        }
+
+        public AnalogTVFilter() : base("Analog TV", iconImage, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable, RenderingSchedule = EffectRenderingSchedule.None })
         {
         }
 
