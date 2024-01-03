@@ -104,7 +104,9 @@
             realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
         }
 
-        public abstract double[] Encode(ImageData surface);
-        public abstract ImageData Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analog feeling
+        public abstract double[] Encode(ImageData surface, double monitorGamma);
+
+        // Decode must respect the original bandwidths, otherwise we don't get that analog feeling
+        public abstract ImageData Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags);
     }
 }
