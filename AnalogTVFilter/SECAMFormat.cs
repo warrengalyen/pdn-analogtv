@@ -64,7 +64,7 @@ namespace AnalogTVFilter
                                                                  2.0 * 506000 }; //Dr
         private readonly double SubCarrierStartTime = 0.4e-6;
 
-        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double bwMult = 1.0, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
@@ -93,10 +93,10 @@ namespace AnalogTVFilter
             }
 
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] dbfir = MathUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
-            double[] drfir = MathUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
-            double[] colfir = MathUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), ((mainBandwidth - sideBandwidth) / 2.0) * bwMult, (mainBandwidth + sideBandwidth) * bwMult, resonance);
+            double[] dbfir = MathUtil.MakeFIRFilter(sampleRate, (int)(128.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
+            double[] drfir = MathUtil.MakeFIRFilter(sampleRate, (int)(128.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
+            double[] colfir = MathUtil.MakeFIRFilter(sampleRate, (int)(128.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
             for (int i = 1; i < colfir.Length; i++)
             {
                 colfir[i] *= 2.0;
@@ -107,9 +107,9 @@ namespace AnalogTVFilter
             {
                 notchfir[i] = -colfir[i];
             }
-            signal = MathUtil.FIRFilter(signal, mainfir);
             double[] DbSignalPre = MathUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
             double[] DrSignalPre = MathUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+            signal = MathUtil.FIRFilter(signal, mainfir);
             double[] DbSignal = new double[DbSignalPre.Length];
             double[] DrSignal = new double[DrSignalPre.Length];
             int combdelay = 1;

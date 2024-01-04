@@ -52,7 +52,7 @@ namespace AnalogTVFilter
                                    true) // Interlaced?
         { }
 
-        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double bwMult = 1.0, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; // Start points of the active parts
             byte R = 0;
@@ -74,9 +74,9 @@ namespace AnalogTVFilter
             bool inclI = ((channelFlags & 0x4) == 0) ? false : true;
 
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] qfir = MathUtil.MakeFIRFilter(sampleRate, 80, 0.0, 2.0 * chromaBandwidthUpper, resonance); //Q has less resolution than I
-            double[] ifir = MathUtil.MakeFIRFilter(sampleRate, 80, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), ((mainBandwidth - sideBandwidth) / 2.0) * bwMult, (mainBandwidth + sideBandwidth) * bwMult, resonance);
+            double[] qfir = MathUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), 0.0, 2.0 * chromaBandwidthUpper * bwMult, resonance); //Q has less resolution than I
+            double[] ifir = MathUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
             for (int i = 1; i < qfir.Length; i++)
             {
                 qfir[i] *= 2.0;
@@ -91,15 +91,15 @@ namespace AnalogTVFilter
             {
                 notchfir[i] = -qfir[i];
             }
-            signal = MathUtil.FIRFilter(signal, mainfir);
             double[] QSignal = MathUtil.FIRFilterCrosstalkShift(signal, qfir, crosstalk, sampleTime, carrierAngFreq);
             double[] ISignal = MathUtil.FIRFilterCrosstalkShift(signal, ifir, crosstalk, sampleTime, carrierAngFreq);
+            signal = MathUtil.FIRFilter(signal, mainfir);
             double time = 0.0;
             for (int i = 0; i < signal.Length; i++)
             {
                 time = i * sampleTime;
-                QSignal[i] = QSignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase) * MathUtil.sqrt2;
-                ISignal[i] = ISignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase) * MathUtil.sqrt2;
+                QSignal[i] = QSignal[i] * Math.Sin(carrierAngFreq * time + chromaPhase);
+                ISignal[i] = ISignal[i] * Math.Cos(carrierAngFreq * time + chromaPhase);
             }
             signal = MathUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
             QSignal = MathUtil.FIRFilter(QSignal, qfir);

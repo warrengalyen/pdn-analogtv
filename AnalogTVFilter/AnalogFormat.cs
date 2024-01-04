@@ -107,6 +107,6 @@
         public abstract double[] Encode(ImageData surface, double monitorGamma);
 
         // Decode must respect the original bandwidths, otherwise we don't get that analog feeling
-        public abstract ImageData Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags);
+        public abstract ImageData Decode(double[] signal, int activeWidth, double bwMult, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags);
     }
 }
