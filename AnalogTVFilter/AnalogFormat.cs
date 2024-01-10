@@ -1,4 +1,31 @@
-﻿namespace AnalogTVFilter
+﻿/*
+ * Abstract base class of all analog formats
+ * 
+ * 2023-2024 Warren Galyen
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+namespace AnalogTVFilter
 {
     public struct ImageData
     {
@@ -92,7 +119,7 @@
 
             frameTime = (isInterlaced ? 2.0 : 1.0) / framerate;
             scanlineTime = (isInterlaced ? 2.0 : 1.0) / (double)(scanlines * framerate);
-            realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
+            realActiveTime = activeTime;
             carrierAngFreq = 2 * Math.PI * chromaCarrierFrequency;
         }
 
@@ -101,12 +128,12 @@
             isInterlaced = interlace;
             frameTime = (isInterlaced ? 2.0 : 1.0) / framerate;
             scanlineTime = (isInterlaced ? 2.0 : 1.0) / (double)(scanlines * framerate);
-            realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
+            realActiveTime = activeTime;
         }
 
-        public abstract double[] Encode(ImageData surface, double monitorGamma);
+        public abstract double[] Encode(ImageData surface);
 
         // Decode must respect the original bandwidths, otherwise we don't get that analog feeling
-        public abstract ImageData Decode(double[] signal, int activeWidth, double bwMult, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags);
+        public abstract ImageData Decode(double[] signal, int activeWidth, double bwMult, double crosstalk, double phError, double phNoise, double resonance, double scanlineJitter, int channelFlags);
     }
 }
