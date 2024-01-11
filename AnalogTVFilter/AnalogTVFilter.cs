@@ -41,8 +41,8 @@ namespace AnalogTVFilter
     {
         public string? DisplayName => "Analog TV";
         public string? Author => "Warren Galyen";
-        public string? Copyright => "2023 Mechanika Design";
-        public Version? Version => new Version("1.0");
+        public string? Copyright => "2023-2024 Mechanika Design";
+        public Version? Version => new Version("1.0.1");
         public Uri? WebsiteUri => new Uri("https://github.com/warrengalyen/pdn-analogtv");
     }
 
@@ -255,13 +255,14 @@ namespace AnalogTVFilter
             if (length <= 0) return;
             for (int i = startIndex; i < startIndex + length; i++)
             {
-                Render(destSurf, DstArgs.Surface, rois[i], surrRect.Location);
+                DrawROIs(destSurf, DstArgs.Surface, rois[i], surrRect.Location);
             }
         }
 
-        private void Render(Surface src, Surface dst, Rectangle dstrectangle, Point rootPoint)
+        private void DrawROIs(Surface src, Surface dst, Rectangle dstrectangle, Point rootPoint)
         {
-            dst.CopySurface(src, dstrectangle);
+            Rectangle properSrcRect = new Rectangle(dstrectangle.X - rootPoint.X, dstrectangle.Y - rootPoint.Y, dstrectangle.Width, dstrectangle.Height);
+            dst.CopySurface(src, dstrectangle.Location, properSrcRect);
         }
     }
 }
